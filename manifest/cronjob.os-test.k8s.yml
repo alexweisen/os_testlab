@@ -1,0 +1,42 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: os-file-uploader
+  namespace: os-test
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Replace
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          annotations:
+            kubectl.kubernetes.io/default-exec-container: upload-file
+        spec:
+          serviceAccountName: os-test-sa
+          initContainers:
+            - name: file-generator
+              image: busybox
+              command: ["/bin/sh", "-c"]
+              args: ["number=$RANDOM && echo $number > /files/${number}.txt"]
+              volumeMounts:
+                - mountPath: /files
+                  name: files-vol
+          containers:
+            - name: file-uploader
+              image: amazon/aws-cli
+              command:
+                - sh
+                - -c
+                - aws s3 cp /files/* s3://os-test-24112025/
+              volumeMounts:
+                - mountPath: /files
+                  name: files-vol
+          restartPolicy: Never
+          volumes:
+            - name: files-vol
+              emptyDir:
+                medium: Memory
